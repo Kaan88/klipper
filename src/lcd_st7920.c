@@ -14,7 +14,7 @@
 
 struct st7920 {
     uint32_t last_cmd_time, sync_wait_ticks, cmd_wait_ticks;
-    struct gpio_out sclk, sid;
+    struct gpio_out sclk, sid, cs;
 };
 
 
@@ -49,6 +49,7 @@ st7920_xmit_byte(struct st7920 *s, uint8_t data)
     struct gpio_out sclk = s->sclk, sid = s->sid;
     uint8_t i;
     for (i=0; i<8; i++) {
+	gpio_out_write(sclk, 0);
         if (data & 0x80) {
             gpio_out_toggle(sid);
             data = ~data;
@@ -57,7 +58,6 @@ st7920_xmit_byte(struct st7920 *s, uint8_t data)
         gpio_out_toggle(sclk);
         ndelay(200);
         data <<= 1;
-        gpio_out_toggle(sclk);
     }
 }
 
@@ -74,8 +74,9 @@ st7920_xmit(struct st7920 *s, uint8_t count, uint8_t *cmds)
     st7920_xmit_byte(s, cmd & 0xf0);
     while (timer_read_time() - last_cmd_time < wait_ticks)
         // Can't complete transfer until delay complete
-        irq_poll();
+        irq_poll();      
     st7920_xmit_byte(s, cmd << 4);
+    
     last_cmd_time = timer_read_time();
 
     // Send subsequent bytes
@@ -85,8 +86,9 @@ st7920_xmit(struct st7920 *s, uint8_t count, uint8_t *cmds)
         st7920_xmit_byte(s, cmd & 0xf0);
         while (timer_read_time() - last_cmd_time < wait_ticks)
             // Can't complete transfer until delay complete
-            irq_poll();
-        st7920_xmit_byte(s, cmd << 4);
+            irq_poll();        
+        st7920_xmit_byte(s, cmd << 4);        
+
         last_cmd_time = timer_read_time();
     }
 
@@ -104,7 +106,8 @@ command_config_st7920(uint32_t *args)
     struct st7920 *s = oid_alloc(args[0], command_config_st7920, sizeof(*s));
     s->sclk = gpio_out_setup(args[2], 0);
     s->sid = gpio_out_setup(args[3], 0);
-    gpio_out_setup(args[1], 1);
+    //gpio_out_setup(args[1], 1);
+    s->cs = gpio_out_setup(args[1], 0);	
 
     if (!CONFIG_HAVE_STRICT_TIMING) {
         s->sync_wait_ticks = args[4];
@@ -136,9 +139,11 @@ void
 command_st7920_send_cmds(uint32_t *args)
 {
     struct st7920 *s = oid_lookup(args[0], command_config_st7920);
+    gpio_out_write(s->cs,1);
     st7920_xmit_byte(s, SYNC_CMD);
     uint8_t len = args[1], *cmds = command_decode_ptr(args[2]);
     st7920_xmit(s, len, cmds);
+    gpio_out_write(s->cs,0);
 }
 DECL_COMMAND(command_st7920_send_cmds, "st7920_send_cmds oid=%c cmds=%*s");
 
@@ -146,9 +151,11 @@ void
 command_st7920_send_data(uint32_t *args)
 {
     struct st7920 *s = oid_lookup(args[0], command_config_st7920);
+    gpio_out_write(s->cs,1);
     st7920_xmit_byte(s, SYNC_DATA);
     uint8_t len = args[1], *data = command_decode_ptr(args[2]);
     st7920_xmit(s, len, data);
+    gpio_out_write(s->cs,0);
 }
 DECL_COMMAND(command_st7920_send_data, "st7920_send_data oid=%c data=%*s");
 
