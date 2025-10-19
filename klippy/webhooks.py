@@ -12,7 +12,7 @@ except ImportError:
     import json
 
     # Json decodes strings as unicode types in Python 2.x.  This doesn't
-    # play well with some parts of Klipper (particuarly displays), so we
+    # play well with some parts of Klipper (particularly displays), so we
     # need to create an object hook. This solution borrowed from:
     #
     # https://stackoverflow.com/questions/956867/
@@ -136,7 +136,7 @@ class ServerSocket:
         printer.register_event_handler(
             'klippy:disconnect', self._handle_disconnect)
         printer.register_event_handler(
-            "klippy:shutdown", self._handle_shutdown)
+            "klippy:analyze_shutdown", self._handle_analyze_shutdown)
 
     def _handle_accept(self, eventtime):
         try:
@@ -157,7 +157,7 @@ class ServerSocket:
             except socket.error:
                 pass
 
-    def _handle_shutdown(self):
+    def _handle_analyze_shutdown(self, msg, details):
         for client in self.clients.values():
             client.dump_request_log()
 
